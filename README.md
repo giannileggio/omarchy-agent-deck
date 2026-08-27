@@ -81,6 +81,12 @@ its own color:
 | `▶` | running (incl. starting/queued) | accent |
 | `○` | idle (incl. stopped) | muted |
 
+`muted` here is a readable variant (`Panel.qml`'s `mutedReadable`: translucent
+foreground, not the theme's own `Color.muted` token directly) — `Color.muted`
+measured ~1.7:1 contrast against the bar/popup background in the Nord theme,
+well under WCAG's 3:1 floor even for large text, and was hard to read next to
+anything else on the bar.
+
 Zero-count statuses are omitted, so an all-idle fleet reads as `○4`, not
 `✕0 ◆0 ▶0 ○4`. Omarchy's theme palette (`Color.qml`) only exposes
 foreground/background/accent/urgent/muted — no separate yellow token — so
@@ -102,12 +108,13 @@ hover-to-close mirror of the open logic was tried and closed the panel on
 its own about a second after opening even with the pointer held still. See
 the comment above `iconHovered` in `Panel.qml`.
 
-Each session row shows a two-letter tool badge (`CL` claude, `CX` codex,
-`GM` gemini, `CU` cursor, `HM` hermes, `OC` opencode, `SH` shell; unknown
-tools get the first two letters of their id, uppercased) next to the title.
-These are plain text monograms, not bundled vendor logos — reproducing
-Anthropic/OpenAI/Google/etc. marks in a third-party plugin isn't this
-plugin's call to make unilaterally.
+Each session row shows a tool icon next to the title — 🤖 claude, 💻 codex,
+✨ gemini, 📝 cursor, ☤ hermes, 🌐 opencode, 🐚 shell, and a few more,
+each in that tool's brand color. These are ported directly from agent-deck's
+own TUI (`internal/ui/styles.go`'s `IconClaude`/`ToolIcon()`/`ToolColor()`)
+— plain Unicode emoji and the exact colors agent-deck itself renders, not
+bundled vendor logo files, so a session reads the same way here as it does
+in agent-deck's own interface. See `Model.toolIcon`/`toolColorHex`.
 
 Clicking a session opens it in agent-deck's own web UI (`/s/{id}`) in your
 default browser.

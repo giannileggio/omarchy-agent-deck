@@ -121,6 +121,16 @@ Panel {
     return Qt.rgba(rgb[0], rgb[1], rgb[2], 1)
   }
 
+  // Color.muted measures ~1.7:1 contrast against this bar/popup background in
+  // the Nord theme (sampled live: muted #4c566a on background #2e3440) — well
+  // under WCAG's 3:1 floor for even large text, and visibly hard to read next
+  // to anything else on the bar. Rather than trust a token some themes may
+  // tune for a different context, mutedReadable is translucent foreground —
+  // alpha-blending toward whatever the background actually is, so it stays
+  // legibly secondary (dimmer than foreground) without inheriting muted's
+  // low-contrast risk on any given theme.
+  readonly property color mutedReadable: Qt.rgba(Color.foreground.r, Color.foreground.g, Color.foreground.b, 0.62)
+
   // Maps a Model.colorKeyForStatus() result to an actual theme color.
   // Spelled out rather than indexed off Color dynamically (Color[key]) to
   // keep this file's QML/JS boundary unambiguous.
@@ -129,7 +139,7 @@ Panel {
       case "urgent": return Color.urgent
       case "warning": return root.warningColor
       case "accent": return Color.accent
-      case "muted": return Color.muted
+      case "muted": return root.mutedReadable
       default: return Color.foreground
     }
   }
@@ -257,7 +267,7 @@ Panel {
             rightPadding: Style.space(16)
             bottomPadding: Style.space(6)
             text: root.connected ? Model.baseUrl(root.config) : "not reachable — " + Model.baseUrl(root.config)
-            color: Color.muted
+            color: root.mutedReadable
             font.family: Style.font.family
             font.pixelSize: Style.font.bodySmall
             elide: Text.ElideRight
@@ -292,7 +302,7 @@ Panel {
               horizontalAlignment: Text.AlignHCenter
               wrapMode: Text.WordWrap
               text: "Run \"agent-deck web\", or check host/port/token in config.local.json"
-              color: Color.muted
+              color: root.mutedReadable
               font.family: Style.font.family
               font.pixelSize: Style.font.bodySmall
             }
@@ -306,7 +316,7 @@ Panel {
             rightPadding: Style.space(16)
             topPadding: Style.space(16)
             text: "Loading…"
-            color: Color.muted
+            color: root.mutedReadable
             font.family: Style.font.family
             font.pixelSize: Style.font.body
           }
@@ -319,7 +329,7 @@ Panel {
             rightPadding: Style.space(16)
             topPadding: Style.space(16)
             text: "No sessions"
-            color: Color.muted
+            color: root.mutedReadable
             font.family: Style.font.family
             font.pixelSize: Style.font.body
           }
@@ -354,24 +364,18 @@ Panel {
                     font.pixelSize: Style.font.body
                   }
 
-                  // Two-letter tool monogram (CL/CX/GM/...) — see
-                  // Model.toolBadge for why this isn't a bundled vendor logo.
-                  Rectangle {
-                    anchors.verticalCenter: parent.verticalCenter
-                    radius: Style.space(3)
-                    color: Qt.rgba(root.barForeground.r, root.barForeground.g, root.barForeground.b, 0.12)
-                    width: toolBadgeText.implicitWidth + Style.space(6)
-                    height: toolBadgeText.implicitHeight + Style.space(2)
-
-                    Text {
-                      id: toolBadgeText
-                      anchors.centerIn: parent
-                      text: Model.toolBadge(row.modelData.tool)
-                      color: Color.muted
-                      font.family: Style.font.family
-                      font.pixelSize: Style.font.caption
-                      font.bold: true
-                    }
+                  // Tool icon + brand color, ported from agent-deck's own
+                  // ToolIcon()/ToolColor() (internal/ui/styles.go) — see
+                  // Model.toolIcon/toolColorHex. Most of these render as
+                  // color emoji, whose own embedded color wins over `color`
+                  // on most systems; the property is still set for the
+                  // non-emoji case ("π", pi) and as the correct intent
+                  // either way.
+                  Text {
+                    text: Model.toolIcon(row.modelData.tool)
+                    color: Model.toolColorHex(row.modelData.tool)
+                    font.family: Style.font.family
+                    font.pixelSize: Style.font.body
                   }
 
                   Text {
@@ -388,7 +392,7 @@ Panel {
                   text: [row.modelData.tool, row.modelData.groupPath, Model.statusLabel(row.modelData.status)]
                     .filter(function(part) { return part && part.length > 0 })
                     .join(" · ")
-                  color: Color.muted
+                  color: root.mutedReadable
                   font.family: Style.font.family
                   font.pixelSize: Style.font.caption
                   elide: Text.ElideRight

@@ -223,29 +223,55 @@ function statusLabel(status) {
   return status.charAt(0).toUpperCase() + status.slice(1)
 }
 
-// Compact two-letter monogram per agent-deck tool id, for a small badge next
-// to each session's title. Deliberately text, not a bundled vendor logo —
-// reproducing Anthropic/OpenAI/Google/etc. marks in a third-party plugin is
-// a trademark question this plugin has no business answering unilaterally.
-// Known ids are agent-deck's own tool integrations (see its codex-hooks/
-// gemini-hooks/hermes-hooks/cursor-hooks commands, "opencode" support, and
-// "claude" as the default); "shell" is agent-deck's raw-shell session type,
-// not an AI agent, but still gets a badge for visual consistency in the list.
-var TOOL_BADGES = {
-  claude: "CL",
-  codex: "CX",
-  gemini: "GM",
-  cursor: "CU",
-  hermes: "HM",
-  opencode: "OC",
-  shell: "SH"
+// Per-tool icon + brand color, next to each session's title. Ported straight
+// from agent-deck's own internal/ui/styles.go (IconClaude/IconGemini/.../
+// ToolIcon()/ToolColor()) — plain Unicode emoji and the exact hex values
+// agent-deck's own TUI renders, not bundled vendor logo files, so this is
+// just replicating agent-deck's own established visual language rather than
+// this plugin inventing (or appropriating) tool branding on its own. Colors
+// are fixed (not derived from the Omarchy theme like the status colors
+// elsewhere in this file) on purpose: they're a tool's identity, the same
+// regardless of which theme happens to be active, matching how agent-deck
+// itself treats them.
+var TOOL_ICONS = {
+  claude: "🤖",
+  gemini: "✨",
+  opencode: "🌐",
+  codex: "💻",
+  copilot: "🐙",
+  crush: "💘",
+  cursor: "📝",
+  hermes: "☤",
+  deepseek: "🐋",
+  pi: "π",
+  shell: "🐚"
+}
+var DEFAULT_TOOL_ICON = "🐚" // agent-deck's ToolIcon() default case
+
+var TOOL_COLORS = {
+  claude: "#ff9e64",   // Anthropic orange
+  gemini: "#bb9af7",   // Google AI purple
+  codex: "#7dcfff",    // light blue for OpenAI
+  copilot: "#7aa2f7",  // GitHub Copilot blue
+  crush: "#bb9af7",    // Charm Crush purple/magenta
+  cursor: "#7aa2f7",   // Cursor blue
+  hermes: "#e0af68",   // Hermes gold
+  deepseek: "#7dcfff",
+  pi: "#7aa2f7",
+  aider: "#f7768e",    // Aider red
+  shell: "#c0caf5",    // agent-deck's plain text color — not a "brand", just readable
+  opencode: "#c0caf5"
+}
+var DEFAULT_TOOL_COLOR = "#787fa0" // agent-deck's ToolColor() default case (gray)
+
+function toolIcon(tool) {
+  var key = String(tool || "").toLowerCase()
+  return TOOL_ICONS.hasOwnProperty(key) ? TOOL_ICONS[key] : DEFAULT_TOOL_ICON
 }
 
-function toolBadge(tool) {
+function toolColorHex(tool) {
   var key = String(tool || "").toLowerCase()
-  if (TOOL_BADGES.hasOwnProperty(key)) return TOOL_BADGES[key]
-  if (key.length === 0) return "?"
-  return key.slice(0, 2).toUpperCase()
+  return TOOL_COLORS.hasOwnProperty(key) ? TOOL_COLORS[key] : DEFAULT_TOOL_COLOR
 }
 
 // Per-glyph breakdown of the compact bar text, e.g. [{status:"error",
@@ -303,7 +329,8 @@ if (typeof module !== "undefined") {
     worstStatus: worstStatus,
     colorKeyForStatus: colorKeyForStatus,
     warningTintFromRgb: warningTintFromRgb,
-    toolBadge: toolBadge,
+    toolIcon: toolIcon,
+    toolColorHex: toolColorHex,
     glyphForStatus: glyphForStatus,
     statusLabel: statusLabel,
     summarySegments: summarySegments,
