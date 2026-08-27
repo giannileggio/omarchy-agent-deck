@@ -71,24 +71,46 @@ shell.
 
 ## What it shows
 
-The bar glyph is a compact per-status count, e.g. `✕1 ◆2 ▶3`:
+The bar glyph is a compact per-status count, e.g. `✕1 ◆2 ▶3`, each glyph in
+its own color:
 
 | Glyph | Status | Color |
 |---|---|---|
 | `✕` | error | urgent (theme's attention color) |
-| `◆` | waiting | urgent (theme's attention color) |
+| `◆` | waiting | warning — a yellow-ish tint derived from the theme's own urgent color, so it reads distinctly from `✕` instead of both being the same red |
 | `▶` | running (incl. starting/queued) | accent |
 | `○` | idle (incl. stopped) | muted |
 
 Zero-count statuses are omitted, so an all-idle fleet reads as `○4`, not
-`✕0 ◆0 ▶0 ○4`. `error` and `waiting` share the theme's one "needs attention"
-color token (Omarchy's theme palette doesn't have a separate red/yellow) —
-the glyph is what tells them apart.
+`✕0 ◆0 ▶0 ○4`. Omarchy's theme palette (`Color.qml`) only exposes
+foreground/background/accent/urgent/muted — no separate yellow token — so
+`warning` isn't a real theme color; it's computed at render time by rotating
+the theme's own `urgent` hue most of the way toward yellow (see
+`Model.warningTintFromRgb` and `Panel.qml`'s `warningColor`), so it stays
+visually coherent with whatever a given theme's red actually looks like.
 
-Clicking the bar glyph opens a panel listing every session (status, title,
-tool, group), sorted so whatever needs attention is at the top. Clicking a
-session opens it in agent-deck's own web UI (`/s/{id}`) in your default
-browser.
+Hovering the bar glyph opens a panel listing every session (status, title,
+tool badge, group), sorted so whatever needs attention is at the top. It
+opens shortly after the pointer settles on the icon (so passing over it on
+the way elsewhere doesn't flash it open); closing is a click — the icon
+again, or anywhere else — or `omarchy-shell shell hide`/IPC, same as any
+other bar panel. It does *not* auto-close on hover-out: once the panel is
+open, the framework's own full-screen dismiss overlay sits on top of the bar
+and stops routing pointer motion back to this widget, so "is the pointer
+still over the icon" can't be trusted anymore right after opening — a
+hover-to-close mirror of the open logic was tried and closed the panel on
+its own about a second after opening even with the pointer held still. See
+the comment above `iconHovered` in `Panel.qml`.
+
+Each session row shows a two-letter tool badge (`CL` claude, `CX` codex,
+`GM` gemini, `CU` cursor, `HM` hermes, `OC` opencode, `SH` shell; unknown
+tools get the first two letters of their id, uppercased) next to the title.
+These are plain text monograms, not bundled vendor logos — reproducing
+Anthropic/OpenAI/Google/etc. marks in a third-party plugin isn't this
+plugin's call to make unilaterally.
+
+Clicking a session opens it in agent-deck's own web UI (`/s/{id}`) in your
+default browser.
 
 If `agent-deck web` isn't reachable, the glyph shows `⚠` and the panel
 explains what to check, rather than erroring or crashing the shell.

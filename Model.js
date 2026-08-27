@@ -137,12 +137,16 @@ function worstStatus(counts) {
 
 // One Color.qml token per status (see shell/Commons/Color.qml: foreground,
 // background, accent, urgent, muted — there is no theme-provided red/yellow/
-// green triad). error and waiting both mean "needs you" and share the one
-// "urgent" token; the glyph is what tells them apart.
+// green triad). error and waiting are both "needs you", but reading the same
+// red for a session that's dead (error) and one that's just paused on a
+// prompt (waiting) is worse than the glyph alone disambiguates, so "waiting"
+// maps to "warning" — not a real Color.qml token, but a yellow-ish tint
+// derived from the theme's own urgent color at render time. See
+// warningTintFromRgb() and Panel.qml's colorForKey().
 function colorKeyForStatus(status) {
   switch (status) {
     case "error": return "urgent"
-    case "waiting": return "urgent"
+    case "waiting": return "warning"
     case "running": return "accent"
     case "starting": return "accent"
     case "queued": return "accent"
@@ -150,6 +154,55 @@ function colorKeyForStatus(status) {
     case "stopped": return "muted"
     default: return "muted"
   }
+}
+
+// ---- Minimal RGB<->HSL, used only to derive the synthetic "warning" tint
+// below from whatever red a given theme's urgent color actually is.
+function rgbToHsl(r, g, b) {
+  var max = Math.max(r, g, b), min = Math.min(r, g, b)
+  var h = 0, s = 0, l = (max + min) / 2
+  if (max !== min) {
+    var d = max - min
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min)
+    switch (max) {
+      case r: h = (g - b) / d + (g < b ? 6 : 0); break
+      case g: h = (b - r) / d + 2; break
+      default: h = (r - g) / d + 4; break
+    }
+    h /= 6
+  }
+  return [h, s, l]
+}
+
+function hslToRgb(h, s, l) {
+  function hue2rgb(p, q, t) {
+    if (t < 0) t += 1
+    if (t > 1) t -= 1
+    if (t < 1 / 6) return p + (q - p) * 6 * t
+    if (t < 1 / 2) return q
+    if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6
+    return p
+  }
+  if (s === 0) return [l, l, l]
+  var q = l < 0.5 ? l * (1 + s) : l + s - l * s
+  var p = 2 * l - q
+  return [hue2rgb(p, q, h + 1 / 3), hue2rgb(p, q, h), hue2rgb(p, q, h - 1 / 3)]
+}
+
+// Rotates a color's hue most of the way toward yellow (60°) along the
+// shorter arc, while boosting saturation/lightness enough to read as a
+// distinct "warning" tone against whatever red the theme's urgent color
+// happens to be — rather than hardcoding a fixed hex that would clash with
+// some themes and match others by coincidence.
+function warningTintFromRgb(r, g, b) {
+  var hsl = rgbToHsl(r, g, b)
+  var yellowHue = 60 / 360
+  var diff = yellowHue - hsl[0]
+  diff -= Math.round(diff) // shortest path around the hue wheel
+  var h = (hsl[0] + diff * 0.85 + 1) % 1
+  var s = Math.max(hsl[1], 0.5)
+  var l = Math.min(Math.max(hsl[2], 0.55), 0.7)
+  return hslToRgb(h, s, l)
 }
 
 function glyphForStatus(status) {
@@ -168,6 +221,31 @@ function glyphForStatus(status) {
 function statusLabel(status) {
   if (!status) return "Unknown"
   return status.charAt(0).toUpperCase() + status.slice(1)
+}
+
+// Compact two-letter monogram per agent-deck tool id, for a small badge next
+// to each session's title. Deliberately text, not a bundled vendor logo —
+// reproducing Anthropic/OpenAI/Google/etc. marks in a third-party plugin is
+// a trademark question this plugin has no business answering unilaterally.
+// Known ids are agent-deck's own tool integrations (see its codex-hooks/
+// gemini-hooks/hermes-hooks/cursor-hooks commands, "opencode" support, and
+// "claude" as the default); "shell" is agent-deck's raw-shell session type,
+// not an AI agent, but still gets a badge for visual consistency in the list.
+var TOOL_BADGES = {
+  claude: "CL",
+  codex: "CX",
+  gemini: "GM",
+  cursor: "CU",
+  hermes: "HM",
+  opencode: "OC",
+  shell: "SH"
+}
+
+function toolBadge(tool) {
+  var key = String(tool || "").toLowerCase()
+  if (TOOL_BADGES.hasOwnProperty(key)) return TOOL_BADGES[key]
+  if (key.length === 0) return "?"
+  return key.slice(0, 2).toUpperCase()
 }
 
 // Per-glyph breakdown of the compact bar text, e.g. [{status:"error",
@@ -224,6 +302,8 @@ if (typeof module !== "undefined") {
     parseMenuResponse: parseMenuResponse,
     worstStatus: worstStatus,
     colorKeyForStatus: colorKeyForStatus,
+    warningTintFromRgb: warningTintFromRgb,
+    toolBadge: toolBadge,
     glyphForStatus: glyphForStatus,
     statusLabel: statusLabel,
     summarySegments: summarySegments,

@@ -69,6 +69,17 @@ BarWidget {
     }
   }
 
+  // Panel.qml's hover-to-open logic needs to know when the pointer is over
+  // this button. injectPanel()'s "in target" copies are one-shot (fired on
+  // bar/settings changes, not per frame), so a live Binding is what keeps
+  // this reactive as the pointer moves.
+  Binding {
+    target: panelLoader.item
+    property: "iconHovered"
+    value: button.tooltipHovered
+    when: panelLoader.item !== null
+  }
+
   WidgetButton {
     id: button
     anchors.fill: parent
@@ -76,7 +87,10 @@ BarWidget {
     text: root.summaryMarkup
     foreground: root.summaryColor
     useActiveColor: false
-    tooltipText: panelLoader.item ? panelLoader.item.tooltipText : "agent-deck"
+    // No separate text tooltip: hovering already opens the full session-list
+    // panel (see Panel.qml's hover-to-open), so a tooltip on top of it would
+    // be redundant — same reasoning as the weather panel's own suppression.
+    tooltipText: ""
 
     onPressed: function(b) {
       if (b === Qt.MiddleButton) root.refresh()

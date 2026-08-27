@@ -112,12 +112,22 @@ Panel {
     openProc.running = true
   }
 
+  // Yellow-ish tint derived from the theme's own urgent/red at render time
+  // (see Model.warningTintFromRgb) — not a real Color.qml token, but "waiting"
+  // reading identically to "error" made a paused-on-a-prompt session look as
+  // alarming as a dead one; the glyph alone wasn't enough of a tell.
+  readonly property color warningColor: {
+    var rgb = Model.warningTintFromRgb(Color.urgent.r, Color.urgent.g, Color.urgent.b)
+    return Qt.rgba(rgb[0], rgb[1], rgb[2], 1)
+  }
+
   // Maps a Model.colorKeyForStatus() result to an actual theme color.
   // Spelled out rather than indexed off Color dynamically (Color[key]) to
   // keep this file's QML/JS boundary unambiguous.
   function colorForKey(key) {
     switch (key) {
       case "urgent": return Color.urgent
+      case "warning": return root.warningColor
       case "accent": return Color.accent
       case "muted": return Color.muted
       default: return Color.foreground
@@ -150,6 +160,40 @@ Panel {
   function open() {
     root.controller.show()
     root.refresh()
+  }
+
+  // ---- Hover-to-open. iconHovered is set live from BarWidget.qml's
+  // WidgetButton via a Binding (this file is loaded by a Loader, so
+  // BarWidget can't reach a plain property assignment on it — see
+  // BarWidget.qml). Edge-triggered (onIconHoveredChanged, not a level check)
+  // so a manual click-to-close while still hovering doesn't immediately
+  // reopen the panel — nothing re-fires until the pointer actually leaves
+  // and comes back.
+  //
+  // Deliberately open-only: closing is left to the panel's existing
+  // mechanisms (click the icon again, click elsewhere — KeyboardPanel's own
+  // full-screen dismiss overlay — or IPC hide), not mirrored on hover-exit.
+  // Once hover opens the panel, that dismiss overlay maps on top of the bar
+  // and stops routing pointer motion to this widget's own MouseArea, so
+  // "is the pointer still over the icon" can't be trusted anymore right
+  // after opening — confirmed live: a hover-close mirror of this closed the
+  // panel ~1s after opening even with the pointer held stationary over the
+  // icon the whole time. See KeyboardPanel.qml's own comment: hover
+  // triggerMode is "missing on purpose (for now)".
+  property bool iconHovered: false
+
+  onIconHoveredChanged: {
+    if (root.iconHovered) hoverOpenTimer.restart()
+    else hoverOpenTimer.stop()
+  }
+
+  // Delay before opening: long enough that passing over the icon on the way
+  // to something else doesn't flash the panel, short enough to feel responsive
+  // to someone actually pausing on it.
+  Timer {
+    id: hoverOpenTimer
+    interval: 250
+    onTriggered: if (root.iconHovered && !root.opened) root.open()
   }
 
   IpcHandler {
@@ -310,13 +354,33 @@ Panel {
                     font.pixelSize: Style.font.body
                   }
 
+                  // Two-letter tool monogram (CL/CX/GM/...) — see
+                  // Model.toolBadge for why this isn't a bundled vendor logo.
+                  Rectangle {
+                    anchors.verticalCenter: parent.verticalCenter
+                    radius: Style.space(3)
+                    color: Qt.rgba(root.barForeground.r, root.barForeground.g, root.barForeground.b, 0.12)
+                    width: toolBadgeText.implicitWidth + Style.space(6)
+                    height: toolBadgeText.implicitHeight + Style.space(2)
+
+                    Text {
+                      id: toolBadgeText
+                      anchors.centerIn: parent
+                      text: Model.toolBadge(row.modelData.tool)
+                      color: Color.muted
+                      font.family: Style.font.family
+                      font.pixelSize: Style.font.caption
+                      font.bold: true
+                    }
+                  }
+
                   Text {
                     text: row.modelData.title
                     color: root.barForeground
                     font.family: Style.font.family
                     font.pixelSize: Style.font.body
                     elide: Text.ElideRight
-                    width: Math.min(implicitWidth, contentColumn.width - Style.space(48))
+                    width: Math.min(implicitWidth, contentColumn.width - Style.space(72))
                   }
                 }
 
