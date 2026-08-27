@@ -15,7 +15,7 @@
   "barWidget": {
     "displayName": "Agent Deck",
     "description": "Live agent-deck session status",
-    "category": "Info",
+    "category": "AI",
     "allowMultiple": false
   }
 }
