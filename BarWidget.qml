@@ -46,13 +46,12 @@ BarWidget {
   }
 
   readonly property bool connected: panelLoader.item ? panelLoader.item.connected === true : false
-  readonly property string summaryText: panelLoader.item ? panelLoader.item.summaryText : "…"
   readonly property string summaryMarkup: panelLoader.item ? panelLoader.item.summaryMarkup : "…"
   // Translucent foreground rather than Color.muted for the same reason as
   // Panel.qml's mutedReadable: this fallback only shows for the brief window
   // before panelLoader.item exists, but low-contrast is low-contrast either way.
   readonly property color summaryColor: panelLoader.item
-    ? panelLoader.item.colorForKey(panelLoader.item.summaryColorKey)
+    ? panelLoader.item.summaryColor
     : Qt.rgba(Color.foreground.r, Color.foreground.g, Color.foreground.b, 0.62)
 
   implicitWidth: button.implicitWidth
