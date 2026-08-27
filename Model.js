@@ -143,6 +143,11 @@ function worstStatus(counts) {
 // maps to "warning" — not a real Color.qml token, but a yellow-ish tint
 // derived from the theme's own urgent color at render time. See
 // warningTintFromRgb() and Panel.qml's colorForKey().
+// Only feeds the bar glyph's disconnected-state fallback color now (see
+// Panel.qml's summaryColorKey) — every actually-visible status color (bar
+// glyph when connected, panel row glyphs) uses statusColorHex() below
+// instead, which matches agent-deck's own fixed palette rather than
+// Omarchy's theme tokens.
 function colorKeyForStatus(status) {
   switch (status) {
     case "error": return "urgent"
@@ -154,6 +159,29 @@ function colorKeyForStatus(status) {
     case "stopped": return "muted"
     default: return "muted"
   }
+}
+
+// Status color, ported from agent-deck's own StatusIndicator() styles
+// (internal/ui/styles.go: RunningStyle/WaitingStyle/IdleStyle/
+// ErrorIndicatorStyle — dark-theme values, matching the tool colors above)
+// rather than Omarchy's theme tokens, so a session's status color reads the
+// same here as it does in agent-deck's own TUI. "starting" uses
+// WaitingStyle in agent-deck (yellow, not green — it's "not running yet"),
+// and "queued" isn't in agent-deck's switch at all; grouped with "starting"
+// here for the same reason glyphForStatus groups them (see its comment).
+var STATUS_COLORS = {
+  error: "#f7768e",
+  waiting: "#e0af68",
+  starting: "#e0af68",
+  queued: "#e0af68",
+  running: "#9ece6a",
+  idle: "#787fa0",
+  stopped: "#787fa0"
+}
+var DEFAULT_STATUS_COLOR = "#787fa0" // agent-deck's default case (IdleStyle)
+
+function statusColorHex(status) {
+  return STATUS_COLORS.hasOwnProperty(status) ? STATUS_COLORS[status] : DEFAULT_STATUS_COLOR
 }
 
 // ---- Minimal RGB<->HSL, used only to derive the synthetic "warning" tint
@@ -332,6 +360,7 @@ if (typeof module !== "undefined") {
     parseMenuResponse: parseMenuResponse,
     worstStatus: worstStatus,
     colorKeyForStatus: colorKeyForStatus,
+    statusColorHex: statusColorHex,
     warningTintFromRgb: warningTintFromRgb,
     toolIcon: toolIcon,
     toolColorHex: toolColorHex,

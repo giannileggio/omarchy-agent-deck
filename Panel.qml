@@ -78,7 +78,7 @@ Panel {
   // as plain text and falls back to summaryColor. See BarWidget.qml.
   readonly property string summaryMarkup: connected
     ? Model.summarySegments(counts).map(function(seg) {
-        return "<font color='" + root.colorHexForKey(Model.colorKeyForStatus(seg.status)) + "'>" + seg.glyph + seg.count + "</font>"
+        return "<font color='" + Model.statusColorHex(seg.status) + "'>" + seg.glyph + seg.count + "</font>"
       }).join(" ")
     : "⚠"
   readonly property string tooltipText: connected
@@ -131,9 +131,12 @@ Panel {
   // low-contrast risk on any given theme.
   readonly property color mutedReadable: Qt.rgba(Color.foreground.r, Color.foreground.g, Color.foreground.b, 0.62)
 
-  // Maps a Model.colorKeyForStatus() result to an actual theme color.
-  // Spelled out rather than indexed off Color dynamically (Color[key]) to
-  // keep this file's QML/JS boundary unambiguous.
+  // Maps a Model.colorKeyForStatus() result to an actual theme color. Only
+  // feeds the disconnected-state bar glyph now (see summaryColorKey below
+  // and BarWidget.qml) — status colors that are actually visible while
+  // connected come from Model.statusColorHex() instead (agent-deck's own
+  // fixed palette). Spelled out rather than indexed off Color dynamically
+  // (Color[key]) to keep this file's QML/JS boundary unambiguous.
   function colorForKey(key) {
     switch (key) {
       case "urgent": return Color.urgent
@@ -142,17 +145,6 @@ Panel {
       case "muted": return root.mutedReadable
       default: return Color.foreground
     }
-  }
-
-  // "#rrggbb" for embedding a theme color in summaryMarkup's <font> spans —
-  // QML color values don't stringify to a usable HTML color on their own.
-  function colorHexForKey(key) {
-    var c = root.colorForKey(key)
-    function hex2(v) {
-      var s = Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16)
-      return s.length < 2 ? "0" + s : s
-    }
-    return "#" + hex2(c.r) + hex2(c.g) + hex2(c.b)
   }
 
   Timer {
@@ -359,7 +351,7 @@ Panel {
 
                   Text {
                     text: Model.glyphForStatus(row.modelData.status)
-                    color: root.colorForKey(Model.colorKeyForStatus(row.modelData.status))
+                    color: Model.statusColorHex(row.modelData.status)
                     font.family: Style.font.family
                     font.pixelSize: Style.font.body
                   }

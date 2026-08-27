@@ -72,35 +72,38 @@ shell.
 ## What it shows
 
 The bar glyph is a compact per-status count, e.g. `✕1 ◐2 ●3`, each glyph in
-its own color. Glyph shapes match agent-deck's own `StatusIndicator()`
-(`internal/ui/styles.go`) exactly, so a session reads the same status shape
-here as in agent-deck's own TUI:
+its own color. Both glyph shapes and colors match agent-deck's own
+`StatusIndicator()`/`ToolColor()`-style fixed palette (`internal/ui/styles.go`,
+dark theme) exactly, so a session reads the same way here as in agent-deck's
+own TUI — same as the tool icons above:
 
 | Glyph | Status | Color |
 |---|---|---|
-| `✕` | error | urgent (theme's attention color) |
-| `◐` | waiting | warning — a yellow-ish tint derived from the theme's own urgent color, so it reads distinctly from `✕` instead of both being the same red |
-| `●` | running (incl. starting/queued, shown as `⟳` per-session in the panel) | accent |
-| `○` | idle (incl. stopped) | muted |
+| `✕` | error | `#f7768e` (agent-deck's `ErrorIndicatorStyle` red) |
+| `◐` | waiting | `#e0af68` (agent-deck's `WaitingStyle` yellow) |
+| `●` | running (incl. starting/queued, shown as `⟳` per-session in the panel) | `#9ece6a` (agent-deck's `RunningStyle` green) |
+| `○` | idle (incl. stopped) | `#787fa0` (agent-deck's `IdleStyle` gray) |
 
-Colors stay Omarchy-theme-derived (unlike the tool icons above, which use
-agent-deck's own fixed brand colors) — these are status indicators, meant to
-sit consistently alongside every other bar widget's accent/urgent/muted use,
-not a fixed "look like agent-deck" identity.
+These are fixed hex values (`Model.statusColorHex`), not derived from the
+active Omarchy theme — a deliberate choice to have this plugin's status
+colors read as *agent-deck's own* colors, not reinterpreted through whatever
+Omarchy theme happens to be active. `starting` uses agent-deck's own
+`WaitingStyle` (yellow, "not running yet") rather than green; `queued` isn't
+in agent-deck's own switch at all and is grouped with `starting` here for the
+same reason `glyphForStatus` groups them (see its comment).
 
-`muted` here is a readable variant (`Panel.qml`'s `mutedReadable`: translucent
-foreground, not the theme's own `Color.muted` token directly) — `Color.muted`
-measured ~1.7:1 contrast against the bar/popup background in the Nord theme,
-well under WCAG's 3:1 floor even for large text, and was hard to read next to
-anything else on the bar.
+Everything else in this plugin's chrome (panel background, borders, the
+disconnected-state `⚠` glyph) stays Omarchy-theme-derived as before —
+`Model.warningTintFromRgb`/`Panel.qml`'s `warningColor` and `colorForKey`
+still exist for that fallback path, just no longer feed the visible
+per-session status colors. `Panel.qml`'s `mutedReadable` (translucent
+foreground rather than the theme's own low-contrast `Color.muted` — it
+measured ~1.7:1 against the bar/popup background in Nord, under WCAG's 3:1
+floor even for large text) is what that fallback and every other secondary
+panel line still use.
 
 Zero-count statuses are omitted, so an all-idle fleet reads as `○4`, not
-`✕0 ◐0 ●0 ○4`. Omarchy's theme palette (`Color.qml`) only exposes
-foreground/background/accent/urgent/muted — no separate yellow token — so
-`warning` isn't a real theme color; it's computed at render time by rotating
-the theme's own `urgent` hue most of the way toward yellow (see
-`Model.warningTintFromRgb` and `Panel.qml`'s `warningColor`), so it stays
-visually coherent with whatever a given theme's red actually looks like.
+`✕0 ◐0 ●0 ○4`.
 
 Hovering the bar glyph opens a panel listing every session (status, title,
 tool badge, group), sorted so whatever needs attention is at the top. It
