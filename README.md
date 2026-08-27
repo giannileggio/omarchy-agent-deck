@@ -1,9 +1,21 @@
-# io.github.giannileggio.agent-deck
+# Agent Deck
 
 Omarchy Quattro bar widget for [agent-deck](https://github.com/asheshgoplani/agent-deck)'s
 `agent-deck web` server. Shows live running/waiting/idle/error session counts in the
 bar, with a click-through panel listing every session and a link to open it in
 agent-deck's own web UI.
+
+Plugin ID: `io.github.giannileggio.agent-deck`.
+
+## Screenshots
+
+| Bar (collapsed) | Panel |
+| :---: | :---: |
+| ![Bar glyph showing per-status session counts](screenshots/bar.png) | ![Session list panel with status, tool, project, and prompt](screenshots/panel.png) |
+
+The panel screenshot is a real fleet, not staged data — that's why it shows
+a session waiting on "push it" and one that's this very plugin's own
+development session.
 
 ## Requirements
 
