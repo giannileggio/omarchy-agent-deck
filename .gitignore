@@ -1,0 +1,2 @@
+# Holds the bearer token (if any) — never committed. See README.md.
+config.local.json

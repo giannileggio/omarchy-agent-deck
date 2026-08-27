@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "id": "gianni.agent-deck",
+  "name": "Agent Deck",
+  "version": "1.0.0",
+  "author": "Gianni Leggio",
+  "license": "MIT",
+  "description": "Live agent-deck session status (running/waiting/idle/error) in the bar, with a click-through session list.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Agent Deck",
+    "description": "Live agent-deck session status",
+    "category": "Info",
+    "allowMultiple": false
+  }
+}
