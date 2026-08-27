@@ -1,4 +1,4 @@
-# gianni.agent-deck
+# io.github.giannileggio.agent-deck
 
 Omarchy Quattro bar widget for [agent-deck](https://github.com/asheshgoplani/agent-deck)'s
 `agent-deck web` server. Shows live running/waiting/idle/error session counts in the
@@ -26,10 +26,10 @@ agent-deck web                   # TUI + web server together
 
 ```sh
 mkdir -p ~/.config/omarchy/plugins
-git clone https://github.com/giannileggio/omarchy-agent-deck.git ~/.config/omarchy/plugins/gianni.agent-deck
+git clone https://github.com/giannileggio/omarchy-agent-deck.git ~/.config/omarchy/plugins/io.github.giannileggio.agent-deck
 ```
 
-Then reload plugins (`omarchy plugin list --json` should show `gianni.agent-deck`,
+Then reload plugins (`omarchy plugin list --json` should show `io.github.giannileggio.agent-deck`,
 or run `omarchy-shell shell rescanPlugins` / restart the shell) and add it to a
 bar slot via Omarchy's plugin settings.
 
@@ -38,8 +38,8 @@ bar slot via Omarchy's plugin settings.
 Copy the example config and edit it:
 
 ```sh
-cp ~/.config/omarchy/plugins/gianni.agent-deck/config.example.json \
-   ~/.config/omarchy/plugins/gianni.agent-deck/config.local.json
+cp ~/.config/omarchy/plugins/io.github.giannileggio.agent-deck/config.example.json \
+   ~/.config/omarchy/plugins/io.github.giannileggio.agent-deck/config.local.json
 ```
 
 `config.local.json`:
@@ -157,7 +157,7 @@ explains what to check, rather than erroring or crashing the shell.
 ## Development
 
 ```sh
-omarchy plugin validate ~/.config/omarchy/plugins/gianni.agent-deck
+omarchy plugin validate ~/.config/omarchy/plugins/io.github.giannileggio.agent-deck
 qmllint -I "$OMARCHY_PATH/shell" BarWidget.qml Panel.qml
 ```
 
