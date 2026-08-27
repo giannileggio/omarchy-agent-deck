@@ -170,17 +170,30 @@ function statusLabel(status) {
   return status.charAt(0).toUpperCase() + status.slice(1)
 }
 
-// Compact bar text, e.g. "✕1 ◆2 ▶3". Zero-count statuses are omitted so an
-// all-idle fleet reads as "○4", not "✕0 ◆0 ▶0 ○4".
+// Per-glyph breakdown of the compact bar text, e.g. [{status:"error",
+// glyph:"✕",count:1}, ...]. Zero-count statuses are omitted so an all-idle
+// fleet reads as "○4", not "✕0 ◆0 ▶0 ○4". Kept separate from each segment's
+// *text* so a caller that can resolve theme colors (Panel.qml) can render
+// each glyph in its own status color instead of the whole string collapsing
+// to one color picked for the fleet's single worst status — see summaryText's
+// callers in BarWidget.qml/Panel.qml.
+function summarySegments(counts) {
+  if (!counts) return []
+  var order = ["error", "waiting", "running", "idle"]
+  var segments = []
+  for (var i = 0; i < order.length; i++) {
+    var status = order[i]
+    var n = counts[status] || 0
+    if (n > 0) segments.push({ status: status, glyph: glyphForStatus(status), count: n })
+  }
+  if (counts.other > 0) segments.push({ status: "other", glyph: "?", count: counts.other })
+  if (segments.length === 0) segments.push({ status: "idle", glyph: glyphForStatus("idle"), count: 0 })
+  return segments
+}
+
+// Compact bar text, e.g. "✕1 ◆2 ▶3", as one plain (uncolored) string.
 function summaryText(counts) {
-  if (!counts) return ""
-  var parts = []
-  if (counts.error > 0) parts.push(glyphForStatus("error") + counts.error)
-  if (counts.waiting > 0) parts.push(glyphForStatus("waiting") + counts.waiting)
-  if (counts.running > 0) parts.push(glyphForStatus("running") + counts.running)
-  if (counts.idle > 0) parts.push(glyphForStatus("idle") + counts.idle)
-  if (counts.other > 0) parts.push("?" + counts.other)
-  return parts.length > 0 ? parts.join(" ") : (glyphForStatus("idle") + "0")
+  return summarySegments(counts).map(function(seg) { return seg.glyph + seg.count }).join(" ")
 }
 
 // Sessions ordered worst-status-first, then by title, so the panel surfaces
@@ -213,6 +226,7 @@ if (typeof module !== "undefined") {
     colorKeyForStatus: colorKeyForStatus,
     glyphForStatus: glyphForStatus,
     statusLabel: statusLabel,
+    summarySegments: summarySegments,
     summaryText: summaryText,
     sortedSessions: sortedSessions
   }

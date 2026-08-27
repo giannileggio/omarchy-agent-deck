@@ -47,6 +47,7 @@ BarWidget {
 
   readonly property bool connected: panelLoader.item ? panelLoader.item.connected === true : false
   readonly property string summaryText: panelLoader.item ? panelLoader.item.summaryText : "…"
+  readonly property string summaryMarkup: panelLoader.item ? panelLoader.item.summaryMarkup : "…"
   readonly property color summaryColor: panelLoader.item
     ? panelLoader.item.colorForKey(panelLoader.item.summaryColorKey)
     : Color.muted
@@ -72,7 +73,7 @@ BarWidget {
     id: button
     anchors.fill: parent
     bar: root.bar
-    text: root.summaryText
+    text: root.summaryMarkup
     foreground: root.summaryColor
     useActiveColor: false
     tooltipText: panelLoader.item ? panelLoader.item.tooltipText : "agent-deck"

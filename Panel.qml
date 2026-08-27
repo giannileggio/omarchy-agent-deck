@@ -56,13 +56,31 @@ Panel {
 
   // ---- Live session data.
   property var snapshot: null           // Model.parseMenuResponse() result, or null
-  property bool connected: false
+  // Derived from snapshot rather than set alongside it: the fetch handler
+  // used to assign root.snapshot and root.connected as two separate
+  // statements, which left a one-tick window where a dependent binding
+  // (tooltipText, summaryMarkup) could see them out of sync — e.g. still
+  // connected===true right after snapshot was reset to null on a failed
+  // fetch, crashing on snapshot.totalSessions. Deriving connected from
+  // snapshot makes that pairing atomic.
+  readonly property bool connected: snapshot !== null
   property bool everFetched: false      // false until the first fetch resolves either way
 
   readonly property var counts: snapshot ? snapshot.counts : null
   readonly property string worstStatus: connected ? Model.worstStatus(counts) : ""
   readonly property string summaryText: connected ? Model.summaryText(counts) : "⚠"
   readonly property string summaryColorKey: connected ? Model.colorKeyForStatus(worstStatus) : "muted"
+  // Rich-text version of summaryText: each glyph+count span wrapped in its
+  // own <font color> so e.g. a "▶1 ○2" segment doesn't render in the fleet's
+  // worst-status (urgent/red) color just because some other session errored.
+  // WidgetButton's Text defaults to Text.AutoText, which renders as styled
+  // text once it sees a leading "<" — plain "⚠" (disconnected) still renders
+  // as plain text and falls back to summaryColor. See BarWidget.qml.
+  readonly property string summaryMarkup: connected
+    ? Model.summarySegments(counts).map(function(seg) {
+        return "<font color='" + root.colorHexForKey(Model.colorKeyForStatus(seg.status)) + "'>" + seg.glyph + seg.count + "</font>"
+      }).join(" ")
+    : "⚠"
   readonly property string tooltipText: connected
     ? ("agent-deck: " + snapshot.totalSessions + " session" + (snapshot.totalSessions === 1 ? "" : "s") + " @ " + Model.baseUrl(config))
     : ("agent-deck: not reachable @ " + Model.baseUrl(config))
@@ -78,9 +96,7 @@ Panel {
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
-        var parsed = Model.parseMenuResponse(text)
-        root.snapshot = parsed
-        root.connected = parsed !== null
+        root.snapshot = Model.parseMenuResponse(text)
         root.everFetched = true
       }
     }
@@ -108,6 +124,17 @@ Panel {
     }
   }
 
+  // "#rrggbb" for embedding a theme color in summaryMarkup's <font> spans —
+  // QML color values don't stringify to a usable HTML color on their own.
+  function colorHexForKey(key) {
+    var c = root.colorForKey(key)
+    function hex2(v) {
+      var s = Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16)
+      return s.length < 2 ? "0" + s : s
+    }
+    return "#" + hex2(c.r) + hex2(c.g) + hex2(c.b)
+  }
+
   Timer {
     id: pollTimer
     interval: Math.max(1, root.config.pollIntervalSeconds) * 1000
@@ -121,7 +148,7 @@ Panel {
   // refresh, so the list is current the moment it's opened rather than
   // waiting for the next poll tick.
   function open() {
-    panelController.show()
+    root.controller.show()
     root.refresh()
   }
 
