@@ -215,7 +215,12 @@ Panel {
     owner: root.barIdentity
     bar: root.bar
     open: root.opened
-    centerOnBar: true
+    // No centerOnBar: that's for center-section widgets (clock, weather)
+    // that want the popup centered on the whole bar regardless of their own
+    // position. This widget lives in the right section by convention (see
+    // README), same as bluetooth/network/audio/monitor/tailscale, none of
+    // which set it either — the default (false) anchors the popup under the
+    // icon itself, which is what a right-section widget wants.
     focusTarget: keyCatcher
     contentWidth: panel.fittedContentWidth(Style.space(320))
     contentHeight: panel.fittedContentHeight(contentColumn.implicitHeight)
