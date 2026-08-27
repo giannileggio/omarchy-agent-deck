@@ -71,7 +71,7 @@ Panel {
   readonly property string summaryText: connected ? Model.summaryText(counts) : "⚠"
   readonly property string summaryColorKey: connected ? Model.colorKeyForStatus(worstStatus) : "muted"
   // Rich-text version of summaryText: each glyph+count span wrapped in its
-  // own <font color> so e.g. a "▶1 ○2" segment doesn't render in the fleet's
+  // own <font color> so e.g. a "●1 ○2" segment doesn't render in the fleet's
   // worst-status (urgent/red) color just because some other session errored.
   // WidgetButton's Text defaults to Text.AutoText, which renders as styled
   // text once it sees a leading "<" — plain "⚠" (disconnected) still renders

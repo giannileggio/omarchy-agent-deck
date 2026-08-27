@@ -71,15 +71,22 @@ shell.
 
 ## What it shows
 
-The bar glyph is a compact per-status count, e.g. `✕1 ◆2 ▶3`, each glyph in
-its own color:
+The bar glyph is a compact per-status count, e.g. `✕1 ◐2 ●3`, each glyph in
+its own color. Glyph shapes match agent-deck's own `StatusIndicator()`
+(`internal/ui/styles.go`) exactly, so a session reads the same status shape
+here as in agent-deck's own TUI:
 
 | Glyph | Status | Color |
 |---|---|---|
 | `✕` | error | urgent (theme's attention color) |
-| `◆` | waiting | warning — a yellow-ish tint derived from the theme's own urgent color, so it reads distinctly from `✕` instead of both being the same red |
-| `▶` | running (incl. starting/queued) | accent |
+| `◐` | waiting | warning — a yellow-ish tint derived from the theme's own urgent color, so it reads distinctly from `✕` instead of both being the same red |
+| `●` | running (incl. starting/queued, shown as `⟳` per-session in the panel) | accent |
 | `○` | idle (incl. stopped) | muted |
+
+Colors stay Omarchy-theme-derived (unlike the tool icons above, which use
+agent-deck's own fixed brand colors) — these are status indicators, meant to
+sit consistently alongside every other bar widget's accent/urgent/muted use,
+not a fixed "look like agent-deck" identity.
 
 `muted` here is a readable variant (`Panel.qml`'s `mutedReadable`: translucent
 foreground, not the theme's own `Color.muted` token directly) — `Color.muted`
@@ -88,7 +95,7 @@ well under WCAG's 3:1 floor even for large text, and was hard to read next to
 anything else on the bar.
 
 Zero-count statuses are omitted, so an all-idle fleet reads as `○4`, not
-`✕0 ◆0 ▶0 ○4`. Omarchy's theme palette (`Color.qml`) only exposes
+`✕0 ◐0 ●0 ○4`. Omarchy's theme palette (`Color.qml`) only exposes
 foreground/background/accent/urgent/muted — no separate yellow token — so
 `warning` isn't a real theme color; it's computed at render time by rotating
 the theme's own `urgent` hue most of the way toward yellow (see

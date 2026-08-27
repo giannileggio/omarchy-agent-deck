@@ -205,14 +205,18 @@ function warningTintFromRgb(r, g, b) {
   return hslToRgb(h, s, l)
 }
 
+// Matches agent-deck's own StatusIndicator() (internal/ui/styles.go) glyph
+// for glyph: ✕ error, ◐ waiting, ● running, ○ idle, ⟳ starting (agent-deck's
+// TUI has no distinct "queued" case; grouped with "starting" here as the
+// other transitional/in-flux state rather than defaulting to plain idle).
 function glyphForStatus(status) {
   switch (status) {
-    case "error": return "✕"    // ✕
-    case "waiting": return "◆"  // ◆
-    case "running": return "▶"  // ▶
-    case "starting": return "▶"
-    case "queued": return "▶"
-    case "idle": return "○"     // ○
+    case "error": return "✕"
+    case "waiting": return "◐"
+    case "running": return "●"
+    case "starting": return "⟳"
+    case "queued": return "⟳"
+    case "idle": return "○"
     case "stopped": return "○"
     default: return "?"
   }
@@ -276,7 +280,7 @@ function toolColorHex(tool) {
 
 // Per-glyph breakdown of the compact bar text, e.g. [{status:"error",
 // glyph:"✕",count:1}, ...]. Zero-count statuses are omitted so an all-idle
-// fleet reads as "○4", not "✕0 ◆0 ▶0 ○4". Kept separate from each segment's
+// fleet reads as "○4", not "✕0 ◐0 ●0 ○4". Kept separate from each segment's
 // *text* so a caller that can resolve theme colors (Panel.qml) can render
 // each glyph in its own status color instead of the whole string collapsing
 // to one color picked for the fleet's single worst status — see summaryText's
@@ -295,7 +299,7 @@ function summarySegments(counts) {
   return segments
 }
 
-// Compact bar text, e.g. "✕1 ◆2 ▶3", as one plain (uncolored) string.
+// Compact bar text, e.g. "✕1 ◐2 ●3", as one plain (uncolored) string.
 function summaryText(counts) {
   return summarySegments(counts).map(function(seg) { return seg.glyph + seg.count }).join(" ")
 }
