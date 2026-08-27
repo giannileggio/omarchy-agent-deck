@@ -8,7 +8,7 @@ import qs.Ui
 // to it, matching the first-party bar-widget+panel plugins (clock, weather).
 BarWidget {
   id: root
-  moduleName: "gianni.agent-deck"
+  moduleName: "io.github.giannileggio.agent-deck"
 
   function injectPanel() {
     var target = panelLoader.item

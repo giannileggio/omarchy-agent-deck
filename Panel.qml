@@ -12,7 +12,7 @@ import "Model.js" as Model
 // open or not) so the bar glyph stays live without the popup ever opening.
 Panel {
   id: root
-  moduleName: "gianni.agent-deck"
+  moduleName: "io.github.giannileggio.agent-deck"
   ipcTarget: root.moduleName
   // The base Panel's own IpcHandler (manageIpc: true) would call root.open()
   // for the "open"/"show"/"toggle" IPC methods — but open() below overrides
@@ -36,7 +36,7 @@ Panel {
   // a secret and deliberately does NOT live in shell.json (which is not
   // gitignored in a user's dotfiles) — it lives in this plugin-local file,
   // which ships .gitignore'd. See README.md and config.example.json.
-  readonly property string configPath: Quickshell.env("HOME") + "/.config/omarchy/plugins/gianni.agent-deck/config.local.json"
+  readonly property string configPath: Quickshell.env("HOME") + "/.config/omarchy/plugins/io.github.giannileggio.agent-deck/config.local.json"
   property var config: Model.parseConfig("")
 
   FileView {
