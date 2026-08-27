@@ -7,15 +7,16 @@
 //
 // Wire format this file understands (agent-deck internal/web, MenuSnapshot):
 //   { items: [ { type: "session", session: { id, title, tool, status,
-//     groupPath, ... } }, { type: "group", group: {...} }, ... ] }
+//     groupPath, projectPath, lastAccessedAt, latestPrompt, tmuxSession,
+//     ... } }, { type: "group", group: {...} }, ... ] }
 // Verified live against agent-deck @ 01c011b5 (2026-08-24).
 
 var DEFAULT_HOST = "127.0.0.1"
 var DEFAULT_PORT = 8420
 var DEFAULT_POLL_SECONDS = 3
 
-// Priority order for "what needs the user's eyes first" — used both to pick
-// the bar's overall status and to sort the panel's session list.
+// Priority order for "what needs the user's eyes first" — used to sort the
+// panel's session list.
 var STATUS_PRIORITY = ["error", "waiting", "starting", "running", "queued", "idle", "stopped"]
 
 function parseConfig(raw) {
@@ -51,12 +52,17 @@ function menuUrl(config) {
 }
 
 // Deep link into agent-deck's own web UI, focused on one session (the
-// server's handleIndex serves the SPA shell at /s/{id} unauthenticated; the
-// SPA's own JS makes the authenticated API calls and strips the token from
-// the URL after reading it — see agent-deck internal/web/static_files.go).
+// server's handleIndex serves the SPA shell at /s/{id} unauthenticated).
+// Deliberately does NOT append ?token=... even when one is configured:
+// fetchMenuCommand's comment below explains agent-deck accepts the token via
+// the Authorization header ONLY, specifically "to keep secrets out of logs"
+// — putting it in a URL handed to xdg-open would undo that (it lands in
+// xdg-open's argv, readable via /proc/*/cmdline by anything running as this
+// user, and then in the browser's own history). If the browser doesn't
+// already have a session with this server, the SPA's own login prompt
+// handles it.
 function sessionUrl(config, sessionId) {
-  var url = baseUrl(config) + "/s/" + encodeURIComponent(sessionId)
-  return config.token ? (url + "?token=" + encodeURIComponent(config.token)) : url
+  return baseUrl(config) + "/s/" + encodeURIComponent(sessionId)
 }
 
 // curl argv for GET /api/menu. agent-deck's REST endpoints accept the token
@@ -100,7 +106,11 @@ function parseMenuResponse(raw) {
       title: String(s.title || s.id || "(untitled)"),
       tool: String(s.tool || ""),
       status: status,
-      groupPath: String(s.groupPath || "")
+      groupPath: String(s.groupPath || ""),
+      projectPath: String(s.projectPath || ""),
+      lastAccessedAt: String(s.lastAccessedAt || ""),
+      latestPrompt: String(s.latestPrompt || ""),
+      tmuxSession: String(s.tmuxSession || "")
     })
 
     if (counts.hasOwnProperty(status)) {
@@ -123,47 +133,9 @@ function parseMenuResponse(raw) {
   }
 }
 
-// Highest-priority non-zero status across the fleet — drives the bar's
-// overall glyph color when collapsed to a single dot.
-function worstStatus(counts) {
-  if (!counts) return ""
-  if (counts.error > 0) return "error"
-  if (counts.waiting > 0) return "waiting"
-  if (counts.running > 0) return "running"
-  if (counts.idle > 0) return "idle"
-  if (counts.other > 0) return "other"
-  return ""
-}
-
-// One Color.qml token per status (see shell/Commons/Color.qml: foreground,
-// background, accent, urgent, muted — there is no theme-provided red/yellow/
-// green triad). error and waiting are both "needs you", but reading the same
-// red for a session that's dead (error) and one that's just paused on a
-// prompt (waiting) is worse than the glyph alone disambiguates, so "waiting"
-// maps to "warning" — not a real Color.qml token, but a yellow-ish tint
-// derived from the theme's own urgent color at render time. See
-// warningTintFromRgb() and Panel.qml's colorForKey().
-// Only feeds the bar glyph's disconnected-state fallback color now (see
-// Panel.qml's summaryColorKey) — every actually-visible status color (bar
-// glyph when connected, panel row glyphs) uses statusColorHex() below
-// instead, which matches agent-deck's own fixed palette rather than
-// Omarchy's theme tokens.
-function colorKeyForStatus(status) {
-  switch (status) {
-    case "error": return "urgent"
-    case "waiting": return "warning"
-    case "running": return "accent"
-    case "starting": return "accent"
-    case "queued": return "accent"
-    case "idle": return "muted"
-    case "stopped": return "muted"
-    default: return "muted"
-  }
-}
-
 // Status color, ported from agent-deck's own StatusIndicator() styles
 // (internal/ui/styles.go: RunningStyle/WaitingStyle/IdleStyle/
-// ErrorIndicatorStyle — dark-theme values, matching the tool colors above)
+// ErrorIndicatorStyle — dark-theme values, matching the tool colors below)
 // rather than Omarchy's theme tokens, so a session's status color reads the
 // same here as it does in agent-deck's own TUI. "starting" uses
 // WaitingStyle in agent-deck (yellow, not green — it's "not running yet"),
@@ -182,55 +154,6 @@ var DEFAULT_STATUS_COLOR = "#787fa0" // agent-deck's default case (IdleStyle)
 
 function statusColorHex(status) {
   return STATUS_COLORS.hasOwnProperty(status) ? STATUS_COLORS[status] : DEFAULT_STATUS_COLOR
-}
-
-// ---- Minimal RGB<->HSL, used only to derive the synthetic "warning" tint
-// below from whatever red a given theme's urgent color actually is.
-function rgbToHsl(r, g, b) {
-  var max = Math.max(r, g, b), min = Math.min(r, g, b)
-  var h = 0, s = 0, l = (max + min) / 2
-  if (max !== min) {
-    var d = max - min
-    s = l > 0.5 ? d / (2 - max - min) : d / (max + min)
-    switch (max) {
-      case r: h = (g - b) / d + (g < b ? 6 : 0); break
-      case g: h = (b - r) / d + 2; break
-      default: h = (r - g) / d + 4; break
-    }
-    h /= 6
-  }
-  return [h, s, l]
-}
-
-function hslToRgb(h, s, l) {
-  function hue2rgb(p, q, t) {
-    if (t < 0) t += 1
-    if (t > 1) t -= 1
-    if (t < 1 / 6) return p + (q - p) * 6 * t
-    if (t < 1 / 2) return q
-    if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6
-    return p
-  }
-  if (s === 0) return [l, l, l]
-  var q = l < 0.5 ? l * (1 + s) : l + s - l * s
-  var p = 2 * l - q
-  return [hue2rgb(p, q, h + 1 / 3), hue2rgb(p, q, h), hue2rgb(p, q, h - 1 / 3)]
-}
-
-// Rotates a color's hue most of the way toward yellow (60°) along the
-// shorter arc, while boosting saturation/lightness enough to read as a
-// distinct "warning" tone against whatever red the theme's urgent color
-// happens to be — rather than hardcoding a fixed hex that would clash with
-// some themes and match others by coincidence.
-function warningTintFromRgb(r, g, b) {
-  var hsl = rgbToHsl(r, g, b)
-  var yellowHue = 60 / 360
-  var diff = yellowHue - hsl[0]
-  diff -= Math.round(diff) // shortest path around the hue wheel
-  var h = (hsl[0] + diff * 0.85 + 1) % 1
-  var s = Math.max(hsl[1], 0.5)
-  var l = Math.min(Math.max(hsl[2], 0.55), 0.7)
-  return hslToRgb(h, s, l)
 }
 
 // Matches agent-deck's own StatusIndicator() (internal/ui/styles.go) glyph
@@ -308,11 +231,12 @@ function toolColorHex(tool) {
 
 // Per-glyph breakdown of the compact bar text, e.g. [{status:"error",
 // glyph:"✕",count:1}, ...]. Zero-count statuses are omitted so an all-idle
-// fleet reads as "○4", not "✕0 ◐0 ●0 ○4". Kept separate from each segment's
-// *text* so a caller that can resolve theme colors (Panel.qml) can render
-// each glyph in its own status color instead of the whole string collapsing
-// to one color picked for the fleet's single worst status — see summaryText's
-// callers in BarWidget.qml/Panel.qml.
+// fleet reads as "○4", not "✕0 ◐0 ●0 ○4" — except when every status is
+// zero (no sessions at all yet, or all filtered out), where a bare "○0" is
+// substituted below so the bar glyph never collapses to an empty string.
+// Kept separate from each segment's *text* so a caller that can resolve
+// theme colors (Panel.qml) can render each glyph in its own status color
+// instead of the whole string collapsing to one color.
 function summarySegments(counts) {
   if (!counts) return []
   var order = ["error", "waiting", "running", "idle"]
@@ -325,11 +249,6 @@ function summarySegments(counts) {
   if (counts.other > 0) segments.push({ status: "other", glyph: "?", count: counts.other })
   if (segments.length === 0) segments.push({ status: "idle", glyph: glyphForStatus("idle"), count: 0 })
   return segments
-}
-
-// Compact bar text, e.g. "✕1 ◐2 ●3", as one plain (uncolored) string.
-function summaryText(counts) {
-  return summarySegments(counts).map(function(seg) { return seg.glyph + seg.count }).join(" ")
 }
 
 // Sessions ordered worst-status-first, then by title, so the panel surfaces
@@ -347,6 +266,49 @@ function sortedSessions(sessions) {
   return ranked
 }
 
+// Last path segment of a session's projectPath, e.g.
+// "/home/g/Projects/foo" -> "foo". The repo name is what actually
+// disambiguates two same-titled sessions living in different projects; the
+// full path is mostly noise in a ~320px popup.
+function projectName(path) {
+  var s = String(path || "").replace(/\/+$/, "")
+  if (!s) return ""
+  var parts = s.split("/")
+  return parts[parts.length - 1] || s
+}
+
+// Compact "how long ago" for a session's lastAccessedAt, e.g. "3m ago".
+// Takes `nowMs` as a parameter rather than reading Date.now() itself, so
+// this stays a pure function of its inputs (see this file's header) — the
+// caller (Panel.qml) supplies a periodically-updated "now".
+function relativeTime(iso, nowMs) {
+  if (!iso) return ""
+  var then = Date.parse(iso)
+  if (!isFinite(then)) return ""
+  var deltaSeconds = Math.max(0, Math.floor((nowMs - then) / 1000))
+  if (deltaSeconds < 45) return "just now"
+  var minutes = Math.floor(deltaSeconds / 60)
+  if (minutes < 60) return minutes + "m ago"
+  var hours = Math.floor(minutes / 60)
+  if (hours < 24) return hours + "h ago"
+  var days = Math.floor(hours / 24)
+  return days + "d ago"
+}
+
+// Text for the row-hover "copy attach command" action — read-only from
+// agent-deck's own point of view (no HTTP call, just a tmux command the user
+// runs themselves in a real terminal).
+function tmuxAttachCommand(tmuxSession) {
+  if (!tmuxSession) return ""
+  return "tmux attach -t " + tmuxSession
+}
+
+// Exported for both Panel.qml's `import "Model.js" as Model` (QML resolves
+// this via the engine's own module loader, module.exports is irrelevant
+// there) and, incidentally, for a plain Node `require("./Model.js")` — this
+// file has no Quickshell/Process dependency, so it can be unit-tested
+// outside the shell entirely; no such tests exist yet, but the export is
+// here for whoever writes them.
 if (typeof module !== "undefined") {
   module.exports = {
     DEFAULT_HOST: DEFAULT_HOST,
@@ -358,16 +320,15 @@ if (typeof module !== "undefined") {
     sessionUrl: sessionUrl,
     fetchMenuCommand: fetchMenuCommand,
     parseMenuResponse: parseMenuResponse,
-    worstStatus: worstStatus,
-    colorKeyForStatus: colorKeyForStatus,
     statusColorHex: statusColorHex,
-    warningTintFromRgb: warningTintFromRgb,
-    toolIcon: toolIcon,
-    toolColorHex: toolColorHex,
     glyphForStatus: glyphForStatus,
     statusLabel: statusLabel,
+    toolIcon: toolIcon,
+    toolColorHex: toolColorHex,
     summarySegments: summarySegments,
-    summaryText: summaryText,
-    sortedSessions: sortedSessions
+    sortedSessions: sortedSessions,
+    projectName: projectName,
+    relativeTime: relativeTime,
+    tmuxAttachCommand: tmuxAttachCommand
   }
 }

@@ -12,7 +12,7 @@ agent-deck's own web UI.
   agent-deck's own default). The widget polls this server directly — it does
   not read tmux or agent-deck's on-disk state, so `agent-deck web` must be
   running for it to show anything but the disconnected state.
-- `curl` and `xdg-open` on `PATH` (both are standard on an Omarchy install).
+- `curl`, `xdg-open`, and `wl-copy` on `PATH` (all standard on an Omarchy/Hyprland install — `wl-copy` ships in `wl-clipboard`).
 
 Start agent-deck's web server with:
 
@@ -32,6 +32,19 @@ git clone https://github.com/giannileggio/omarchy-agent-deck.git ~/.config/omarc
 Then reload plugins (`omarchy plugin list --json` should show `io.github.giannileggio.agent-deck`,
 or run `omarchy-shell shell rescanPlugins` / restart the shell) and add it to a
 bar slot via Omarchy's plugin settings.
+
+## Uninstall
+
+Remove the widget from its bar slot via Omarchy's plugin settings, then:
+
+```sh
+rm -rf ~/.config/omarchy/plugins/io.github.giannileggio.agent-deck
+```
+
+That takes `config.local.json` (and the bearer token in it, if any) with it —
+there's nothing else this plugin writes outside its own plugin directory.
+Reload plugins the same way as install (`rescanPlugins` or a shell restart)
+to pick up the removal.
 
 ## Configuration
 
@@ -93,14 +106,11 @@ in agent-deck's own switch at all and is grouped with `starting` here for the
 same reason `glyphForStatus` groups them (see its comment).
 
 Everything else in this plugin's chrome (panel background, borders, the
-disconnected-state `⚠` glyph) stays Omarchy-theme-derived as before —
-`Model.warningTintFromRgb`/`Panel.qml`'s `warningColor` and `colorForKey`
-still exist for that fallback path, just no longer feed the visible
-per-session status colors. `Panel.qml`'s `mutedReadable` (translucent
-foreground rather than the theme's own low-contrast `Color.muted` — it
-measured ~1.7:1 against the bar/popup background in Nord, under WCAG's 3:1
-floor even for large text) is what that fallback and every other secondary
-panel line still use.
+disconnected-state `⚠` glyph) stays Omarchy-theme-derived. `Panel.qml`'s
+`mutedReadable` (translucent foreground rather than the theme's own
+low-contrast `Color.muted` — it measured ~1.7:1 against the bar/popup
+background in Nord, under WCAG's 3:1 floor even for large text) is what the
+disconnected glyph and every secondary panel line use.
 
 Zero-count statuses are omitted, so an all-idle fleet reads as `○4`, not
 `✕0 ◐0 ●0 ○4`.
@@ -126,8 +136,21 @@ own TUI (`internal/ui/styles.go`'s `IconClaude`/`ToolIcon()`/`ToolColor()`)
 bundled vendor logo files, so a session reads the same way here as it does
 in agent-deck's own interface. See `Model.toolIcon`/`toolColorHex`.
 
+Each row also shows the project's directory name and how long ago the
+session was last touched (e.g. `omarchy-agent-deck · 3m ago`), so two
+sessions sharing a title in different repos, or one that's gone stale, are
+easy to tell apart at a glance. A `waiting` session additionally shows its
+latest prompt/output on its own line (`↳ push it`) — agent-deck's own
+`latestPrompt` field — so you can see what it's actually stuck on without
+opening it.
+
 Clicking a session opens it in agent-deck's own web UI (`/s/{id}`) in your
-default browser.
+default browser. Hovering a row also reveals a small copy icon on the right;
+clicking it copies `tmux attach -t <session>` to the clipboard (via
+`wl-copy`) so you can jump into the session's real terminal instead. This is
+the only per-row action — it's read-only from agent-deck's point of view (no
+HTTP call), unlike stopping, restarting, or archiving a session, which this
+plugin deliberately does not expose from a hover-opened popup.
 
 If `agent-deck web` isn't reachable, the glyph shows `⚠` and the panel
 explains what to check, rather than erroring or crashing the shell.
@@ -158,8 +181,16 @@ explains what to check, rather than erroring or crashing the shell.
 
 ```sh
 omarchy plugin validate ~/.config/omarchy/plugins/io.github.giannileggio.agent-deck
-qmllint -I "$OMARCHY_PATH/shell" BarWidget.qml Panel.qml
+# qmllint isn't on PATH by default on a stock Arch/Omarchy install — it
+# ships with qt6-declarative at /usr/lib/qt6/bin/qmllint.
+/usr/lib/qt6/bin/qmllint -I "$OMARCHY_PATH/shell" BarWidget.qml Panel.qml
 ```
+
+The `qs.Commons`/`qs.Ui` import-resolution warnings, `BarWidget`/`Panel`
+"inheritance cycle", and `missing-property` warnings on `panelLoader.item`
+are expected noise from `qmllint` not having the shell's full build context
+— they show up identically on Omarchy's own first-party `weather`/`clock`
+plugins, not something specific to this one.
 
 ## License
 
