@@ -25,6 +25,7 @@ development session.
   not read tmux or agent-deck's on-disk state, so `agent-deck web` must be
   running for it to show anything but the disconnected state.
 - `curl`, `xdg-open`, and `wl-copy` on `PATH` (all standard on an Omarchy/Hyprland install — `wl-copy` ships in `wl-clipboard`).
+- `notify-send` (from `libnotify`) on `PATH` — only if `notifyOnAttention` is turned on. Ships alongside Omarchy's default notification daemon (`mako`), so it's already there on a stock install; the widget just doesn't call it unless you opt in.
 
 Start agent-deck's web server with:
 
@@ -74,7 +75,9 @@ cp ~/.config/omarchy/plugins/io.github.giannileggio.agent-deck/config.example.js
   "host": "127.0.0.1",
   "port": 8420,
   "token": "",
-  "pollIntervalSeconds": 3
+  "pollIntervalSeconds": 3,
+  "blinkOnAttention": true,
+  "notifyOnAttention": false
 }
 ```
 
@@ -84,6 +87,8 @@ cp ~/.config/omarchy/plugins/io.github.giannileggio.agent-deck/config.example.js
 | `port` | `8420` | agent-deck web server port. |
 | `token` | `""` (none) | Only needed if you started `agent-deck web --token ...` (e.g. binding non-loopback). Leave empty for the default local/no-auth setup. |
 | `pollIntervalSeconds` | `3` | How often the widget polls `GET /api/menu`. |
+| `blinkOnAttention` | `true` | Pulse the bar glyph a few times when a session newly starts `waiting` or `error`ing (see below). |
+| `notifyOnAttention` | `false` | Also fire a desktop notification (`notify-send`) for the same event. Off by default since it's an external side effect, not just chrome. |
 
 `config.local.json` is **gitignored on purpose** — it's where the bearer
 token lives, and it should never end up committed alongside this plugin's
@@ -166,6 +171,34 @@ plugin deliberately does not expose from a hover-opened popup.
 
 If `agent-deck web` isn't reachable, the glyph shows `⚠` and the panel
 explains what to check, rather than erroring or crashing the shell.
+
+## Attention alerts
+
+A session flipping to `waiting` (it wants input) or `error` (it failed) is
+the one kind of status change worth interrupting whatever you're doing for —
+everything else (idle, running, starting/queued) is a session making
+progress on its own. When a poll finds a session newly in one of those two
+states — it wasn't already `waiting`/`error` a moment ago, matched by
+session id — the widget can:
+
+- **Blink** (`blinkOnAttention`, on by default): the bar glyph pulses a
+  few times, independent of the glyph's own per-status color.
+- **Notify** (`notifyOnAttention`, off by default): a desktop notification
+  via `notify-send`, titled with the session's new status and name, urgency
+  `critical` for `error` and normal for `waiting` — so it stays on screen
+  until dismissed (on notification daemons that honor urgency, e.g. Omarchy's
+  default `mako`) for the case that actually failed.
+
+Both react to the same event and can be enabled independently. A session
+that's still `waiting` on the next poll doesn't re-trigger either — only the
+transition into that state does; `error` -> `waiting` (e.g. a retry) counts
+as a new transition since the specific state changed. The very first poll to
+ever succeed after the shell starts has nothing to compare against, so any
+session already `waiting`/`error` at that moment counts as new too — you get
+flagged about a fleet that was already stuck rather than the widget quietly
+adopting it as normal. A session that's still `waiting`/`error` across a
+later, temporary disconnect from `agent-deck web` does *not* re-trigger on
+reconnect — only that first-ever poll gets this treatment.
 
 ## Known limitations
 

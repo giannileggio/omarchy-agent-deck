@@ -67,6 +67,54 @@ Panel {
   readonly property bool connected: snapshot !== null
   property bool everFetched: false      // false until the first fetch resolves either way
 
+  // Previous poll's session list, kept around purely to diff against the
+  // next one for attention transitions (see applySnapshot below) — not
+  // touched on a failed fetch, so a transient disconnect doesn't erase this
+  // and cause the same still-waiting session to re-fire as "new" once the
+  // connection comes back.
+  property var previousSessions: null
+
+  // Bumped once per poll that surfaces at least one newly-waiting/errored
+  // session (Model.newAttentionSessions) — BarWidget.qml watches this to
+  // restart its blink animation. A counter rather than a bool so a second
+  // attention event arriving mid-blink still restarts it (a bool set to the
+  // same true value again wouldn't emit a change).
+  property int attentionTick: 0
+
+  function applySnapshot(newSnapshot) {
+    if (newSnapshot) {
+      var attention = Model.newAttentionSessions(root.previousSessions, newSnapshot.sessions)
+      root.previousSessions = newSnapshot.sessions
+      if (attention.length > 0) {
+        if (root.config.blinkOnAttention) root.attentionTick++
+        if (root.config.notifyOnAttention) attention.forEach(root.sendAttentionNotification)
+      }
+    }
+    // snapshot (and therefore `connected`) still flips to null/false on a
+    // failed fetch even though previousSessions is preserved above — those
+    // are two separate concerns (what the bar shows right now vs. what to
+    // diff the next successful poll against).
+    root.snapshot = newSnapshot
+  }
+
+  // notify-send, same fire-and-forget Util.execArgv idiom as openSession's
+  // xdg-open and copyAttachCommand's wl-copy below — not bundled as a hard
+  // dependency (see README) since it only runs when notifyOnAttention is
+  // turned on. `-u critical` keeps an errored session's notification on
+  // screen until dismissed on notification daemons that honor urgency
+  // (mako/dunst do); "waiting" uses the default urgency since it's routine,
+  // not exceptional.
+  function sendAttentionNotification(session) {
+    var summary = Model.statusLabel(session.status) + ": " + session.title
+    var body = [Model.toolIcon(session.tool) + " " + session.tool, Model.projectName(session.projectPath)]
+      .filter(function(part) { return part && part.length > 0 })
+      .join(" · ")
+    var args = ["notify-send", "-a", "Agent Deck", "-u", session.status === "error" ? "critical" : "normal"]
+    if (body) args.push(summary, body)
+    else args.push(summary)
+    Util.execArgv(args)
+  }
+
   readonly property var counts: snapshot ? snapshot.counts : null
   readonly property string summaryMarkup: connected
     ? Model.summarySegments(counts).map(function(seg) {
@@ -102,7 +150,7 @@ Panel {
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
-        root.snapshot = Model.parseMenuResponse(text)
+        root.applySnapshot(Model.parseMenuResponse(text))
         root.everFetched = true
       }
     }

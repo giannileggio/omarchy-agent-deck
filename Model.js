@@ -14,6 +14,12 @@
 var DEFAULT_HOST = "127.0.0.1"
 var DEFAULT_PORT = 8420
 var DEFAULT_POLL_SECONDS = 3
+// Visual feedback (a few opacity pulses on the bar glyph) is low-risk and
+// on by default; a desktop notification is an external side effect (spawns
+// notify-send, steals a moment of attention) so it defaults off, same
+// opt-in posture as the token field above.
+var DEFAULT_BLINK_ON_ATTENTION = true
+var DEFAULT_NOTIFY_ON_ATTENTION = false
 
 // Priority order for "what needs the user's eyes first" — used to sort the
 // panel's session list.
@@ -24,7 +30,9 @@ function parseConfig(raw) {
     host: DEFAULT_HOST,
     port: DEFAULT_PORT,
     token: "",
-    pollIntervalSeconds: DEFAULT_POLL_SECONDS
+    pollIntervalSeconds: DEFAULT_POLL_SECONDS,
+    blinkOnAttention: DEFAULT_BLINK_ON_ATTENTION,
+    notifyOnAttention: DEFAULT_NOTIFY_ON_ATTENTION
   }
   try {
     var data = raw ? JSON.parse(String(raw)) : null
@@ -35,6 +43,8 @@ function parseConfig(raw) {
       if (typeof data.token === "string") cfg.token = data.token
       var poll = parseFloat(data.pollIntervalSeconds)
       if (isFinite(poll) && poll >= 1) cfg.pollIntervalSeconds = poll
+      if (typeof data.blinkOnAttention === "boolean") cfg.blinkOnAttention = data.blinkOnAttention
+      if (typeof data.notifyOnAttention === "boolean") cfg.notifyOnAttention = data.notifyOnAttention
     }
   } catch (e) {
     // Malformed/missing config file: fall back to defaults rather than
@@ -251,6 +261,37 @@ function summarySegments(counts) {
   return segments
 }
 
+// Statuses worth interrupting the user for — the same two STATUS_PRIORITY
+// puts first, since those are exactly the ones where a session is stuck on
+// the user rather than making progress on its own.
+var ATTENTION_STATUSES = ["waiting", "error"]
+
+function isAttentionStatus(status) {
+  return ATTENTION_STATUSES.indexOf(status) !== -1
+}
+
+// Sessions in `currSessions` that just started needing attention — i.e. are
+// waiting/error now but weren't in that same status a moment ago, matched by
+// id against `prevSessions` (the previous poll's session list, or null/[]
+// before the first poll ever resolves). A session already sitting in
+// "waiting" across two consecutive polls produces no event (nothing new
+// happened); one that flips running -> waiting, or error -> waiting (e.g. a
+// retry), does. `prevSessions` being null/empty treats every currently
+// waiting/error session as new — so the very first fetch that ever
+// succeeds (prevSessions hasn't been set yet) still flags a fleet that was
+// already stuck, instead of silently adopting it as "normal". A later
+// fetch after a transient disconnect is unaffected: the caller (Panel.qml's
+// applySnapshot) only overwrites its stored previous-sessions list on a
+// successful fetch, so a still-waiting session reconnecting doesn't
+// re-count as new.
+function newAttentionSessions(prevSessions, currSessions) {
+  var prevStatusById = {}
+  ;(prevSessions || []).forEach(function(s) { prevStatusById[s.id] = s.status })
+  return (currSessions || []).filter(function(s) {
+    return isAttentionStatus(s.status) && prevStatusById[s.id] !== s.status
+  })
+}
+
 // Sessions ordered worst-status-first, then by title, so the panel surfaces
 // what needs attention without the user having to scroll for it.
 function sortedSessions(sessions) {
@@ -326,6 +367,8 @@ if (typeof module !== "undefined") {
     toolIcon: toolIcon,
     toolColorHex: toolColorHex,
     summarySegments: summarySegments,
+    isAttentionStatus: isAttentionStatus,
+    newAttentionSessions: newAttentionSessions,
     sortedSessions: sortedSessions,
     projectName: projectName,
     relativeTime: relativeTime,
