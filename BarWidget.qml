@@ -54,6 +54,14 @@ BarWidget {
     ? panelLoader.item.summaryColor
     : Qt.rgba(Color.foreground.r, Color.foreground.g, Color.foreground.b, 0.62)
 
+  // Bumped by Panel.qml whenever a poll surfaces a newly-waiting/errored
+  // session (see its attentionTick/applySnapshot) and blinkOnAttention is
+  // on. A plain property binding, so it stays live the same way connected/
+  // summaryMarkup/summaryColor above do — no Loader.onLoaded wiring needed
+  // since this isn't read until it actually changes.
+  readonly property int attentionTick: panelLoader.item ? panelLoader.item.attentionTick : 0
+  onAttentionTickChanged: attentionBlink.restart()
+
   implicitWidth: button.implicitWidth
   implicitHeight: button.implicitHeight
 
@@ -98,5 +106,19 @@ BarWidget {
       if (b === Qt.MiddleButton) root.refresh()
       else root.togglePanel()
     }
+  }
+
+  // Three quick opacity pulses on the glyph itself — cheap, framework-agnostic
+  // (plain QtQuick Item.opacity, nothing shell-specific) attention grabber for
+  // "a session just started waiting/erroring", separate from the glyph's own
+  // color (which already encodes *which* status via summaryMarkup's per-
+  // segment <font color>). Restarted, not just started, so a second
+  // attention event arriving mid-blink still gets its own full pulse rather
+  // than being swallowed by the one already running.
+  SequentialAnimation {
+    id: attentionBlink
+    loops: 3
+    NumberAnimation { target: button; property: "opacity"; to: 0.25; duration: 180; easing.type: Easing.InOutQuad }
+    NumberAnimation { target: button; property: "opacity"; to: 1.0; duration: 180; easing.type: Easing.InOutQuad }
   }
 }
