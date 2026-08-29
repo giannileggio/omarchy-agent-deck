@@ -96,8 +96,10 @@ code. `config.example.json` (committed) is just a template; the widget falls
 back to the defaults above if `config.local.json` is missing entirely, so a
 default local `agent-deck web` (no `--token`) needs no config file at all.
 
-The file is watched, so editing it takes effect live without restarting the
-shell.
+The file is re-read every few seconds, so editing it takes effect live
+without restarting the shell — through a small bounded/symlink-safe shell
+helper rather than a raw file load, since it holds the bearer token (see
+`Model.configReadCommand` for the boundary it enforces).
 
 ## What it shows
 

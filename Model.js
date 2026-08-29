@@ -14,6 +14,17 @@
 var DEFAULT_HOST = "127.0.0.1"
 var DEFAULT_PORT = 8420
 var DEFAULT_POLL_SECONDS = 3
+// Hard caps applied before anything from the network reaches JSON.parse,
+// sorting, or the QML model — independent of curl's own --max-filesize
+// (fetchMenuCommand below), which only helps when the server advertises
+// Content-Length up front. 1 MiB/500 sessions/500 chars are all generous
+// for what a session list actually is; a response this large is already a
+// signal something's wrong, not a fleet to render.
+var MAX_RESPONSE_BYTES = 1048576
+var MAX_ITEMS = 500
+var MAX_FIELD_CHARS = 500
+// config.local.json is a handful of short fields; 64 KiB is generous.
+var MAX_CONFIG_BYTES = 65536
 // Visual feedback (a few opacity pulses on the bar glyph) is low-risk and
 // on by default; a desktop notification is an external side effect (spawns
 // notify-send, steals a moment of attention) so it defaults off, same
@@ -75,17 +86,75 @@ function sessionUrl(config, sessionId) {
   return baseUrl(config) + "/s/" + encodeURIComponent(sessionId)
 }
 
-// curl argv for GET /api/menu. agent-deck's REST endpoints accept the token
-// via the `Authorization: Bearer` header ONLY (query-string tokens are
-// rejected on purpose, to keep secrets out of logs — see auth.go); building
-// the header here, in one place, means that constraint only has to be known
-// once.
+// Escapes a value for curl's config-file quoting rules (see `curl --manual`,
+// "config file"): inside a double-quoted value, backslash and double-quote
+// need escaping, and a raw newline/CR/tab would otherwise terminate the
+// directive early or start an attacker-controlled one of its own.
+function curlConfigEscape(value) {
+  return String(value)
+    .replace(/\\/g, "\\\\")
+    .replace(/"/g, "\\\"")
+    .replace(/\n/g, "\\n")
+    .replace(/\r/g, "\\r")
+    .replace(/\t/g, "\\t")
+}
+
+// curl argv for GET /api/menu, run through `sh -c` for one reason: piping
+// curl into `head -c` is the simplest way to enforce MAX_RESPONSE_BYTES as
+// a hard, consumer-side cap regardless of what the server claims or how it
+// streams (curl's own --max-filesize is best-effort — it only aborts early
+// when a Content-Length is sent up front). None of the interpolated values
+// here come from the network, so this isn't a shell-injection concern; the
+// one secret (the bearer token) deliberately does NOT appear anywhere in
+// this argv — see fetchMenuStdin below.
 function fetchMenuCommand(config) {
-  var args = ["curl", "-fsS", "--max-time", "5", menuUrl(config)]
-  if (config.token) {
-    args.splice(1, 0, "-H", "Authorization: Bearer " + config.token)
-  }
-  return args
+  return ["sh", "-c",
+    'curl -fsS --max-time 5 --max-filesize "$2" -K - "$1" | head -c "$2"',
+    "sh", menuUrl(config), String(MAX_RESPONSE_BYTES)]
+}
+
+// curl config-file text (curl's `-K -` above reads this from stdin)
+// carrying the `Authorization: Bearer` header. agent-deck's REST endpoints
+// accept the token via that header ONLY (query-string tokens are rejected
+// on purpose, to keep secrets out of logs — see auth.go); routing it
+// through curl's stdin instead of `-H` on the argv keeps it out of
+// /proc/*/cmdline too, where it would otherwise be readable by any other
+// process running as this user for as long as curl runs.
+function fetchMenuStdin(config) {
+  if (!config.token) return ""
+  return "header = \"Authorization: Bearer " + curlConfigEscape(config.token) + "\"\n"
+}
+
+// argv for a bounded, symlink-safe read of config.local.json — it holds the
+// bearer token, so it's read through this instead of handed straight to
+// FileView (whose QML-exposed API has no symlink/type/owner/size controls).
+// `dd ... iflag=nofollow` opens the path with O_NOFOLLOW: a symlink is
+// refused at open() itself (GNU coreutils, atomic — not a stat()-then-open()
+// race), and `bs=MAX_CONFIG_BYTES count=1` caps the read at one block. The
+// preceding shell checks reject anything that isn't a regular file owned by
+// the invoking user with no group/other write bit. Any check failing —
+// including "no such file" — falls through to `exit 0` with empty output,
+// which parseConfig() already treats the same as "no config file": defaults.
+function configReadCommand(path) {
+  var script = [
+    'p=$1',
+    'if [ -L "$p" ] || [ ! -e "$p" ] || [ ! -f "$p" ]; then exit 0; fi',
+    'owner=$(stat -c %u "$p" 2>/dev/null) || exit 0',
+    '[ "$owner" = "$(id -u)" ] || exit 0',
+    'perm=$(stat -c %#a "$p" 2>/dev/null) || exit 0',
+    '[ $(( perm & 022 )) -eq 0 ] || exit 0',
+    'dd if="$p" bs=' + MAX_CONFIG_BYTES + ' count=1 iflag=nofollow status=none 2>/dev/null'
+  ].join('\n')
+  return ["sh", "-c", script, "sh", path]
+}
+
+// Coerces to string and truncates to MAX_FIELD_CHARS, falling back to
+// `fallback` when value is empty/missing — same "never trust one server
+// field's length" boundary applied to every session field parseMenuResponse
+// pulls off the wire.
+function boundedString(value, fallback) {
+  var s = String(value || fallback || "")
+  return s.length > MAX_FIELD_CHARS ? s.slice(0, MAX_FIELD_CHARS) : s
 }
 
 // Returns null on any failure (empty body, unreachable server, unexpected
@@ -104,23 +173,27 @@ function parseMenuResponse(raw) {
 
   var sessions = []
   var counts = { running: 0, waiting: 0, idle: 0, error: 0, other: 0 }
+  // Cap how many items get parsed at all — not just how many render — so a
+  // pathological/compromised server can't turn this into an unbounded sort
+  // or an unbounded QML Repeater model.
+  var itemCount = Math.min(data.items.length, MAX_ITEMS)
 
-  for (var i = 0; i < data.items.length; i++) {
+  for (var i = 0; i < itemCount; i++) {
     var item = data.items[i]
     if (!item || item.type !== "session" || !item.session) continue
 
     var s = item.session
-    var status = String(s.status || "").toLowerCase()
+    var status = boundedString(s.status, "").toLowerCase()
     sessions.push({
-      id: String(s.id || ""),
-      title: String(s.title || s.id || "(untitled)"),
-      tool: String(s.tool || ""),
+      id: boundedString(s.id, ""),
+      title: boundedString(s.title, s.id || "(untitled)"),
+      tool: boundedString(s.tool, ""),
       status: status,
-      groupPath: String(s.groupPath || ""),
-      projectPath: String(s.projectPath || ""),
-      lastAccessedAt: String(s.lastAccessedAt || ""),
-      latestPrompt: String(s.latestPrompt || ""),
-      tmuxSession: String(s.tmuxSession || "")
+      groupPath: boundedString(s.groupPath, ""),
+      projectPath: boundedString(s.projectPath, ""),
+      lastAccessedAt: boundedString(s.lastAccessedAt, ""),
+      latestPrompt: boundedString(s.latestPrompt, ""),
+      tmuxSession: boundedString(s.tmuxSession, "")
     })
 
     if (counts.hasOwnProperty(status)) {
@@ -136,7 +209,7 @@ function parseMenuResponse(raw) {
   }
 
   return {
-    generatedAt: String(data.generatedAt || ""),
+    generatedAt: boundedString(data.generatedAt, ""),
     totalSessions: sessions.length,
     sessions: sessions,
     counts: counts
@@ -360,6 +433,8 @@ if (typeof module !== "undefined") {
     menuUrl: menuUrl,
     sessionUrl: sessionUrl,
     fetchMenuCommand: fetchMenuCommand,
+    fetchMenuStdin: fetchMenuStdin,
+    configReadCommand: configReadCommand,
     parseMenuResponse: parseMenuResponse,
     statusColorHex: statusColorHex,
     glyphForStatus: glyphForStatus,
