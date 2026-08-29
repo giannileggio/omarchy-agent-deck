@@ -40,19 +40,41 @@ Panel {
   readonly property string configPath: Quickshell.env("HOME") + "/.config/omarchy/plugins/io.github.giannileggio.agent-deck/config.local.json"
   property var config: Model.parseConfig("")
 
-  FileView {
-    id: configFile
-    path: root.configPath
-    watchChanges: true
-    printErrors: false
-    onLoaded: root.applyConfig(text())
-    onLoadFailed: root.applyConfig("")
-    onFileChanged: reload()
+  // config.local.json carries the bearer token, so it's read through
+  // Model.configReadCommand's bounded shell helper rather than FileView —
+  // FileView's own QML API exposes no symlink/type/owner/size boundary to
+  // enforce on a secret-bearing file (see that function's comment).
+  Process {
+    id: configProc
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root.applyConfig(text)
+    }
+  }
+
+  function reloadConfig() {
+    if (configProc.running) return
+    configProc.command = Model.configReadCommand(root.configPath)
+    configProc.running = true
   }
 
   function applyConfig(raw) {
     root.config = Model.parseConfig(raw)
     root.refresh()
+  }
+
+  Timer {
+    id: configTimer
+    // Fixed cadence, deliberately not root.config.pollIntervalSeconds
+    // (which lives *inside* this very file — scheduling this off it would
+    // be circular). Close enough to FileView's watchChanges immediacy to
+    // still read as "live" while keeping the read path the bounded one
+    // above instead of an unbounded FileView load.
+    interval: 5000
+    running: true
+    repeat: true
+    triggeredOnStart: true
+    onTriggered: root.reloadConfig()
   }
 
   // ---- Live session data.
@@ -133,7 +155,17 @@ Panel {
   function refresh() {
     if (fetchProc.running) return
     fetchProc.command = Model.fetchMenuCommand(root.config)
+    // stdinEnabled toggled true→false around one write: the bearer token
+    // (Model.fetchMenuStdin) goes to curl's stdin (via -K -, see
+    // fetchMenuCommand) rather than its argv, which — unlike stdin — is
+    // readable by any other process running as this user for as long as
+    // curl runs (/proc/*/cmdline). Setting stdinEnabled back to false right
+    // after the write closes the channel, which is what tells curl's `-K -`
+    // it's seen the whole config and can proceed.
+    fetchProc.stdinEnabled = true
     fetchProc.running = true
+    fetchProc.write(Model.fetchMenuStdin(root.config))
+    fetchProc.stdinEnabled = false
   }
 
   Process {
@@ -481,6 +513,10 @@ Panel {
 
                   Text {
                     text: row.modelData.title
+                    // Server-controlled (agent-deck session title): plain
+                    // text explicitly, so it can't be interpreted as markup
+                    // by Text's default AutoText detection.
+                    textFormat: Text.PlainText
                     color: root.barForeground
                     font.family: Style.font.family
                     font.pixelSize: Style.font.body
@@ -497,6 +533,9 @@ Panel {
                   text: [row.modelData.tool, row.modelData.groupPath, Model.statusLabel(row.modelData.status)]
                     .filter(function(part) { return part && part.length > 0 })
                     .join(" · ")
+                  // tool/groupPath are server-controlled; see the title
+                  // Text above for why this is explicit.
+                  textFormat: Text.PlainText
                   color: root.mutedReadable
                   font.family: Style.font.family
                   font.pixelSize: Style.font.caption
@@ -514,6 +553,9 @@ Panel {
                   text: [Model.projectName(row.modelData.projectPath), Model.relativeTime(row.modelData.lastAccessedAt, root.nowMs)]
                     .filter(function(part) { return part && part.length > 0 })
                     .join(" · ")
+                  // projectPath is server-controlled; see the title Text
+                  // above for why this is explicit.
+                  textFormat: Text.PlainText
                   visible: text.length > 0
                   color: root.mutedReadable
                   font.family: Style.font.family
@@ -529,6 +571,11 @@ Panel {
                 Text {
                   visible: row.modelData.status === "waiting" && row.modelData.latestPrompt.length > 0
                   text: "↳ " + row.modelData.latestPrompt
+                  // latestPrompt is server-controlled (and the least
+                  // constrained field of the lot — it's the agent's raw
+                  // output); see the title Text above for why this is
+                  // explicit.
+                  textFormat: Text.PlainText
                   color: root.mutedReadable
                   font.family: Style.font.family
                   font.italic: true
